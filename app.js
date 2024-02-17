@@ -17,8 +17,20 @@ const {
 } = require('./middlewares/validation');
 
 const NotFoundError = require('./errors/NotFoundError');
+const handleErrors = require('./middlewares/handleErrors');
 
-app.use(cors({ credentials: true, origin: ['https://domainmalik.students.nomoredomainswork.ru', 'http://domainmalik.students.nomoredomainswork.ru', 'https://api.domainmalik.students.nomoredomainswork.ru', 'http://api.domainmalik.students.nomoredomainswork.ru', 'http://localhost:3000'] }));
+app.use(
+  cors({
+    credentials: true,
+    origin: [
+      'https://domainmalik.students.nomoredomainswork.ru',
+      'http://domainmalik.students.nomoredomainswork.ru',
+      'https://api.domainmalik.students.nomoredomainswork.ru',
+      'http://api.domainmalik.students.nomoredomainswork.ru',
+      'http://localhost:3000',
+    ],
+  }),
+);
 
 const { PORT = 3000, DB_URL = 'mongodb://127.0.0.1:27017/bitfilmsdb' } = process.env;
 mongoose.connect(DB_URL);
@@ -46,13 +58,6 @@ app.use(errorLogger);
 
 app.use(errors());
 
-app.use((error, req, res, next) => {
-  const statusCode = error.statusCode || 500;
-  const message = statusCode === 500 ? 'На сервере произошла ошибка' : error.message;
-  res.status(statusCode).send({ message });
-  next();
-});
+app.use(handleErrors);
 
-app.listen(PORT, () => {
-  console.log(`app.js listening on port: ${PORT}`);
-});
+app.listen(PORT);

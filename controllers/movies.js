@@ -1,51 +1,62 @@
 /* eslint-disable max-len */
+const { HTTP_STATUS_CREATED } = require('http2').constants;
 const Movie = require('../models/movie');
 const BadRequestError = require('../errors/BadRequestError');
+const ForbiddenError = require('../errors/ForbiddenError');
 const InternalServerError = require('../errors/InternalServerError');
 const NotFoundError = require('../errors/NotFoundError');
-const UserRightsError = require('../errors/UserRightsError');
 
 const getMovies = async (req, res, next) => {
-  Movie.find({})
+  const userId = req.user._id;
+  Movie.find({ owner: userId })
     .then((movies) => {
-      res.status(200).send(movies);
+      if (movies) {
+        return res.send(movies);
+      }
+      return next(new NotFoundError('Фильмы не найдены'));
     })
-    .catch(() => next(new InternalServerError('Ошибка со стороны сервера')));
+    .catch((error) => next(new NotFoundError(error.message)));
 };
 
 const createMovie = async (req, res, next) => {
   const {
-    country, director, duration, year, description, image, trailerLink, thumbnail, nameRU, nameEN,
+    country, director, duration, year, description, image, trailerLink, thumbnail, movieId, nameRU, nameEN,
   } = req.body;
   Movie.create({
-    country, director, duration, year, description, image, trailerLink, thumbnail, owner: req.user._id, nameRU, nameEN,
+    country, director, duration, year, description, image, trailerLink, thumbnail, owner: req.user._id, movieId, nameRU, nameEN,
   })
-    .then((movie) => res.status(201).send({ movie }))
+    .then((movie) => res.status(HTTP_STATUS_CREATED).send({ movie }))
     .catch((error) => {
       if (error.name === 'ValidationError') {
         return next(new BadRequestError('Переданы некорректные данные при создании фильма'));
       }
-      return next(new InternalServerError('Ошибка со стороны сервера'));
+      return next(new NotFoundError(error.message));
     });
 };
 
 const deleteMovie = async (req, res, next) => {
   const { movieId } = req.params;
   Movie.findById(movieId)
-    .then((deletedMovie) => {
-      if (!deletedMovie) {
+    .then((movie) => {
+      if (!movie) {
         return next(new NotFoundError('Фильм по указанному ID не найдена'));
       }
-      if (deletedMovie.owner.toString() !== req.user._id.toString()) {
-        return next(new UserRightsError('Недостаточно прав для удаления фильма'));
+      if (movie.owner.toString() !== req.user._id.toString()) {
+        return next(new ForbiddenError('Недостаточно прав для удаления фильма'));
       }
-      return deletedMovie.deleteOne()
-        .then(() => res.send({ message: `Фильм с ID: ${deletedMovie._id} была успешно удалена` }))
+      return movie.deleteOne()
+        .then(() => res.send({ message: `Фильм с ID: ${movie._id} была успешно удалена` }))
         .catch(next);
     })
     .catch((error) => {
       if (error.name === 'CastError') {
         return next(new BadRequestError('Передан не валидный ID фильма'));
+      }
+      if (error.name === 'NotFoundError') {
+        return next(new NotFoundError(error.message));
+      }
+      if (error.name === 'ForbiddenError') {
+        return next(new ForbiddenError(error.message));
       }
       return next(new InternalServerError('Ошибка со стороны сервера'));
     });
